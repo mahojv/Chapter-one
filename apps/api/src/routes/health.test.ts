@@ -1,34 +1,34 @@
-import { healthResponseSchema } from '@chapter-one/validation';
+import { esquemaRespuestaSalud } from '@chapter-one/validation';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildApp } from '../app.js';
+import { construirApp } from '../app.js';
 
-describe('GET /health', () => {
-  const app = buildApp({ logger: false });
+describe('Endpoint GET /health', () => {
+  const aplicacion = construirApp({ logger: false });
 
   beforeAll(async () => {
-    await app.ready();
+    await aplicacion.ready();
   });
 
   afterAll(async () => {
-    await app.close();
+    await aplicacion.close();
   });
 
-  it('should return 200 OK with valid health status payload', async () => {
-    const response = await app.inject({
+  it('debe responder 200 OK con una carga útil válida de estado de salud', async () => {
+    const respuesta = await aplicacion.inject({
       method: 'GET',
       url: '/health',
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(respuesta.statusCode).toBe(200);
 
-    const body = JSON.parse(response.body);
-    expect(body.status).toBe('ok');
-    expect(typeof body.uptime).toBe('number');
-    expect(typeof body.timestamp).toBe('string');
-    expect(body.version).toBe('0.1.0');
+    const cuerpo = JSON.parse(respuesta.body);
+    expect(cuerpo.status).toBe('ok');
+    expect(typeof cuerpo.uptime).toBe('number');
+    expect(typeof cuerpo.timestamp).toBe('string');
+    expect(cuerpo.version).toBe('0.1.0');
 
-    // Schema validation through shared @chapter-one/validation package
-    const parseResult = healthResponseSchema.safeParse(body);
-    expect(parseResult.success).toBe(true);
+    // Validación de esquema mediante el paquete compartido @chapter-one/validation
+    const resultadoValidacion = esquemaRespuestaSalud.safeParse(cuerpo);
+    expect(resultadoValidacion.success).toBe(true);
   });
 });

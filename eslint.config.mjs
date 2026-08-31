@@ -12,7 +12,7 @@ export default [
       '**/coverage/**',
       '**/*.log',
       '**/scripts/**',
-      'apps/mobile/**', // Mobile has its own expo lint / eslint config
+      'apps/mobile/**', // Mobile usa su propia configuración de expo lint
     ],
   },
   js.configs.recommended,
@@ -30,6 +30,7 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+      'no-undef': 'off', // En proyectos TypeScript, el compilador tsc se encarga de validar variables
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
