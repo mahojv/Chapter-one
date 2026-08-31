@@ -8,17 +8,21 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/db/seed.ts"
   },
   "dependencies": {
-    "@chapter-one/types": "*",
-    "@chapter-one/validation": "*",
+    "@chapter-one/types": "^0.1.0",
+    "@chapter-one/validation": "^0.1.0",
     "@fastify/cors": "^10.0.2",
     "dotenv": "^16.4.7",
-    "fastify": "^5.2.1"
+    "fastify": "^5.2.1",
+    "pg": "^8.13.3"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
+    "@types/pg": "^8.11.11",
     "tsx": "^4.19.3",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"

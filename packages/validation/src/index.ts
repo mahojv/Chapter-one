@@ -1,23 +1,34 @@
 import { z } from 'zod';
 
 /**
- * Technical and generic validation schemas for Chapter One foundation.
+ * Esquemas de validación técnicos y genéricos para la fundación de Chapter One.
  */
 
-export const healthStatusSchema = z.enum(['ok', 'degraded', 'error']);
+// Esquema de estados de salud
+export const esquemaEstadoSalud = z.enum(['ok', 'degraded', 'error']);
+export const healthStatusSchema = esquemaEstadoSalud;
 
-export const healthResponseSchema = z.object({
-  status: healthStatusSchema,
+// Esquema de validación para la respuesta de salud
+export const esquemaRespuestaSalud = z.object({
+  status: esquemaEstadoSalud,
   timestamp: z.string().datetime(),
   uptime: z.number().nonnegative(),
   version: z.string().min(1),
   environment: z.string().optional(),
+  database: z.enum(['connected', 'disconnected']).optional(),
 });
+export const healthResponseSchema = esquemaRespuestaSalud;
 
-export const paginationParamsSchema = z.object({
+// Esquema de validación para paginación
+export const esquemaParametrosPaginacion = z.object({
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().positive().max(100).optional().default(20),
 });
+export const paginationParamsSchema = esquemaParametrosPaginacion;
 
-export type HealthResponseSchema = z.infer<typeof healthResponseSchema>;
-export type PaginationParamsSchema = z.infer<typeof paginationParamsSchema>;
+// Tipos inferidos de los esquemas
+export type EsquemaRespuestaSalud = z.infer<typeof esquemaRespuestaSalud>;
+export type HealthResponseSchema = EsquemaRespuestaSalud;
+
+export type EsquemaParametrosPaginacion = z.infer<typeof esquemaParametrosPaginacion>;
+export type PaginationParamsSchema = EsquemaParametrosPaginacion;

@@ -1,23 +1,34 @@
 import cors from '@fastify/cors';
 import fastify, { type FastifyInstance } from 'fastify';
-import { healthRoutes } from './routes/health.js';
+import { pluginBaseDatos } from './plugins/database.js';
+import { rutasSalud } from './routes/health.js';
 
-export interface BuildAppOptions {
+export interface OpcionesConstruccionApp {
   logger?: boolean;
 }
+export type BuildAppOptions = OpcionesConstruccionApp;
 
-export function buildApp(options: BuildAppOptions = { logger: true }): FastifyInstance {
-  const app = fastify({
-    logger: options.logger,
+/**
+ * Factoría para inicializar y configurar la aplicación Fastify
+ */
+export function construirApp(opciones: OpcionesConstruccionApp = { logger: true }): FastifyInstance {
+  const aplicacion = fastify({
+    logger: opciones.logger,
   });
 
-  // Enable Cross-Origin Resource Sharing for frontend communication
-  app.register(cors, {
+  // Habilitar CORS para permitir solicitudes del cliente frontend
+  aplicacion.register(cors, {
     origin: true,
   });
 
-  // Register routes
-  app.register(healthRoutes);
+  // Registrar plugin de conexión a PostgreSQL
+  aplicacion.register(pluginBaseDatos);
 
-  return app;
+  // Registrar rutas del sistema
+  aplicacion.register(rutasSalud);
+
+  return aplicacion;
 }
+
+// Alias para compatibilidad
+export const buildApp = construirApp;
