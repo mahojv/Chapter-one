@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Git
+.git/
+.gitignore
+
+# Frontend Mobile (not needed for API container)
+apps/mobile/
+
+# Build artifacts and caches
+dist/
+build/
+.expo/
+coverage/
+
+# Documentation
+docs/
+
+# Environment files
+.env
+.env*.local
+
+# Miscellaneous
+*.md
+.DS_Store
+Thumbs.db

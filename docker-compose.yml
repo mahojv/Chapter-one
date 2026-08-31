@@ -4,18 +4,55 @@ services:
     container_name: chapter-one-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-chapter_one_dev}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      POSTGRES_DB: ${POSTGRES_DB:-chapter_one_prod}
+      POSTGRES_USER: ${POSTGRES_USER:-chapter_one}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - chapter_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-chapter_one_dev}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chapter_one} -d ${POSTGRES_DB:-chapter_one_prod}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    # Nota: No se publica ningún 'ports:' hacia el host para mantener PostgreSQL privado en la red interna
+
+  api:
+    image: chapter-one-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chapter-one-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      API_HOST: 0.0.0.0
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-chapter_one_prod}
+      POSTGRES_USER: ${POSTGRES_USER:-chapter_one}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-chapter_one}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chapter_one_prod}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # Publicado exclusivamente en localhost (127.0.0.1) para que Cloudflare Tunnel (cloudflared) acceda a él
+      - "127.0.0.1:${API_PORT:-3001}:3001"
+    networks:
+      - chapter_network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  chapter_network:
+    driver: bridge
 
 volumes:
   postgres_data:
