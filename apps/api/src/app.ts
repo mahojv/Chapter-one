@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import fastify, { type FastifyInstance } from 'fastify';
 import { pluginBaseDatos } from './plugins/database.js';
 import { rutasSalud } from './routes/health.js';
+import { rutasJugadores } from './routes/players.js';
 
 export interface OpcionesConstruccionApp {
   logger?: boolean;
@@ -26,6 +27,7 @@ export function construirApp(opciones: OpcionesConstruccionApp = { logger: true 
 
   // Registrar rutas del sistema
   aplicacion.register(rutasSalud);
+  aplicacion.register(rutasJugadores);
 
   return aplicacion;
 }
