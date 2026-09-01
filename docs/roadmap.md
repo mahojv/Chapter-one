@@ -1,114 +1,103 @@
 # Chapter One - Roadmap del Proyecto
 
-Este documento establece la secuencia cronológica de las fases de desarrollo para **Chapter One**, desde la fundación técnica hasta el despliegue en producción.
+Este documento establece la secuencia cronológica y el estado de avance de las fases de desarrollo para **Chapter One**, desde la fundación técnica hasta el despliegue en producción.
 
 ---
 
-## Fase 1: Foundation (Actual)
+## Fase 1: Foundation ✅ (Completada)
 * **Objetivo**: Establecer la infraestructura técnica y arquitectura monorepo.
-* **Entregables**:
+* **Entregables implementados**:
   * Estructura npm workspaces con frontend (`apps/mobile`), backend (`apps/api`) y paquetes compartidos (`packages/types`, `packages/validation`).
-  * Backend Fastify con endpoint base `GET /health`.
+  * Backend Fastify con endpoint base de diagnóstico `GET /health`.
   * Configuración de PostgreSQL 18 Alpine mediante Docker Compose.
-  * Herramientas de calidad integradas (TypeScript estricto, ESLint, Prettier, Vitest).
-  * Documentación técnica inicial y arquitectura.
+  * Herramientas de calidad integradas (TypeScript estricto, ESLint Flat Config, Prettier, Vitest).
+  * Documentación técnica inicial y arquitectura en `docs/`.
 
 ---
 
-## Fase 2: Player System
-* **Objetivo**: Gestión de la identidad del usuario y perfil del jugador.
-* **Alcance previsto**:
-  * Autenticación segura y gestión de sesiones (registro, login, tokens).
-  * Perfil del jugador (avatar, clase de personaje inicial, datos biográficos y preferencias).
-  * Modelado relacional en PostgreSQL para cuentas de usuario y perfiles.
+## Fase 2: Game Design & Domain Model ✅ (Completada)
+* **Objetivo**: Diseñar las reglas fundamentales del RPG de vida real y formalizar el modelo de dominio.
+* **Entregables implementados**:
+  * `docs/game-design.md`: 14 principios de diseño, fórmula de XP `100 × N^1.6`, escala de Atributos 1 a 100, árbol de Habilidades, ventana móvil de consistencia de 30 días y control de decay.
+  * `docs/domain-model.md`: 15 entidades relacionales, diagrama ER conceptual, matrices de inmutabilidad y flujo de progresión.
 
 ---
 
-## Fase 3: Exercise System
-* **Objetivo**: Catálogo y biblioteca integral de ejercicios físicos.
-* **Alcance previsto**:
-  * Base de datos de ejercicios clasificados por grupos musculares, equipo necesario y nivel de dificultad.
-  * Instrucciones técnicas, pautas de forma y precauciones anatómicas.
-  * Endpoints y vistas frontend para explorar, buscar y filtrar ejercicios.
+## Fase 3: Persistencia PostgreSQL & Despliegue en J1900 ✅ (Completada)
+* **Objetivo**: Crear el esquema relacional en PostgreSQL 18 y preparar el stack para el servidor de producción.
+* **Entregables implementados**:
+  * Migración `001_initial_schema.sql` con 13 ENUMs y 15 tablas relacionales con restricciones de integridad y foreign keys.
+  * Script de semillas `initial_seeds.sql` con los 7 atributos base y 10 habilidades iniciales.
+  * Sistema de migraciones y semillas idempotentes con tabla `_schema_migrations`.
+  * Despliegue en servidor Linux J1900 (Docker 29.x, Docker Compose, red interna aislada, volumen persistente).
+  * Multi-stage `Dockerfile` optimizado y documentación operativa `docs/deployment-j1900.md`.
+  * Dominio de producción activo: `https://chapter-api.odysseo.uk/health`.
 
 ---
 
-## Fase 4: Workout System
-* **Objetivo**: Registro, estructuración y ejecución de sesiones de entrenamiento.
-* **Alcance previsto**:
-  * Creación y gestión de rutinas y planes de entrenamiento.
-  * Logger de sesiones en tiempo real (series, repeticiones, cargas y tiempos de descanso).
-  * Historial de entrenamientos y persistencia de rendimiento por sesión.
+## Fase 4: Vertical Slice de Players ✅ (Completada)
+* **Objetivo**: Implementar el primer vertical slice de la API para gestión de jugadores.
+* **Entregables implementados**:
+  * Arquitectura limpia en 3 capas: Rutas (`routes/players.ts`), Servicios (`services/playerService.ts`) y Repositorios (`repositories/playerRepository.ts`).
+  * Endpoints REST: `POST /players`, `GET /players/:id`, `PATCH /players/:id`.
+  * Inserción atómica transaccional (`BEGIN` / `COMMIT`) de `Player` y `PlayerProgress` inicial (`Nivel 1`, `0 XP`, `0 Skill Points`).
+  * Validación estricta con Zod en `@chapter-one/validation`.
+  * Suite de pruebas unitarias y de integración en `apps/api/src/routes/players.test.ts`.
 
 ---
 
-## Fase 5: RPG Engine
-* **Objetivo**: Núcleo matemático de gamificación y progresión de nivel.
-* **Alcance previsto**:
-  * Algoritmo de ganancia de experiencia (XP) calculado a partir de la intensidad y volumen del entrenamiento.
-  * Curva de nivel del jugador (niveles 1 a 100).
-  * Atributos de personaje: Fuerza (STR), Resistencia (STA), Agilidad (AGI), Vitalidad (VIT) y Disciplina (DIS).
+## Fase 5: Autenticación e Identidad del Jugador ✅ (Completada)
+* **Objetivo**: Establecer la capa de seguridad e identidad desacoplada del jugador.
+* **Entregables implementados**:
+  * Adopción de **Clerk** como proveedor de identidad externo OIDC.
+  * Plugin de Fastify `apps/api/src/plugins/auth.ts` con validación asimétrica de JWT mediante JWKS (`jose`) y caché en memoria de claves públicas.
+  * Endpoint canónico `GET /players/me` para resolver el perfil y progreso del usuario autenticado (404 `PLAYER_PROFILE_REQUIRED` para usuarios nuevos).
+  * Enlace forzado inmutable entre el claim `sub` del token y `players.auth_user_id`.
+  * Protección anti-IDOR con 403 Forbidden en `PATCH /players/:id`.
+  * Modo de pruebas determinista `AUTH_MOCK=true` para tests automatizados locales (estrictamente inhabilitado en producción).
+  * Documentación completa en `docs/authentication.md` y actualización de `.env.example` / `.env.production.example`.
 
 ---
 
-## Fase 6: Quests & Missions
-* **Objetivo**: Sistema de misiones diarias, semanales y retos épicos.
+## Fase 6: Exercise & Workout System ⏳ (Próxima)
+* **Objetivo**: Catálogo de ejercicios y registro de entrenamientos.
 * **Alcance previsto**:
-  * Generación y seguimiento de misiones diarias (ej. entrenar 45 minutos, cumplir hidratación).
-  * Misiones semanales de consistencia y desafíos de superación.
-  * Recompensas en experiencia, insignias y títulos desbloqueables.
+  * Catálogo de ejercicios clasificados por grupo muscular y equipo.
+  * Registro de sesiones de entrenamiento con series, repeticiones y cargas.
+  * Emisión de eventos inmutables en `progress_events` al registrar entrenamientos.
 
 ---
 
-## Fase 7: Skills & Skill Tree
-* **Objetivo**: Árbol de habilidades y maestría física del jugador.
+## Fase 7: RPG Engine & Progresión ⏳
+* **Objetivo**: Cálculo de ganancia de XP, subidas de nivel y proyección de atributos.
 * **Alcance previsto**:
-  * Ramas de especialización (Fuerza, Resistencia, Movilidad, Longevidad).
-  * Desbloqueo de nodos y habilidades pasivas al alcanzar hitos físicos.
-  * Visualización interactiva del árbol de habilidades en el cliente móvil.
+  * Algoritmo de cálculo de XP global a partir del volumen e intensidad de entrenamiento.
+  * Evaluación de la curva de nivel `100 × N^1.6` y asignación de Skill Points.
+  * Recálculo reactivo de los 7 atributos base (1-100) en base a las habilidades hijas.
 
 ---
 
-## Fase 8: Progress & Measurements
-* **Objetivo**: Métricas de composición corporal y registros visuales de progreso.
+## Fase 8: Hábitos, Consistencia y Decay ⏳
+* **Objetivo**: Sistema de consistencia de hábitos y prevención de degradación de habilidades.
 * **Alcance previsto**:
-  * Registro de peso corporal, porcentaje de grasa y medidas antropométricas.
-  * Gráficas de evolución y tendencias temporales.
-  * Galería cronológica y privada de fotografías de progreso físico.
+  * Logger diario de hábitos con estados `COMPLETED`, `SKIPPED`, `REST_DAY`, `FAILED`.
+  * Cálculo de consistencia en ventana móvil de 30 días.
+  * Regla de descanso: congelación de decay hasta un máximo de 3 días consecutivos.
 
 ---
 
-## Fase 9: Gamification
-* **Objetivo**: Retención, recompensas y dinámicas de juego avanzadas.
+## Fase 9: Misiones y Logros ⏳
+* **Objetivo**: Quests diarias/semanales y catálogo de logros permanentes.
 * **Alcance previsto**:
-  * Sistema de rachas (streaks) y multiplicadores de bonificación.
-  * Logros especiales, medallas conmemorativas y títulos de jugador.
-  * Pantallas de felicitación, efectos visuales de "Level Up" y recompensas auditivas/hápticas.
+  * Asignación y seguimiento de misiones (`quests`, `quest_progress`).
+  * Desbloqueo y auditoría de logros (`achievements`, `player_achievements`).
+  * Sistema de recompensas polimórficas (`rewards`).
 
 ---
 
-## Fase 10: AI Coach
-* **Objetivo**: Asistente inteligente y personalizado para el entrenamiento.
+## Fase 10: Integración Frontend Mobile (Expo / Clerk) ⏳
+* **Objetivo**: Conectar el cliente React Native/Expo con la API autenticada de producción.
 * **Alcance previsto**:
-  * Análisis inteligente del rendimiento y fatiga acumulada.
-  * Recomendaciones automáticas de sobrecarga progresiva y ajustes de volumen.
-  * Feedback interactivo con el jugador según sus objetivos y nivel de RPG.
-
----
-
-## Fase 11: Nutrition
-* **Objetivo**: Planificación y registro nutricional alineado al rendimiento físico.
-* **Alcance previsto**:
-  * Registro simplificado de macronutrientes y aporte calórico.
-  * Metas nutricionales dinámicas según días de entrenamiento vs. días de descanso.
-  * Sincronización del estado de energía del personaje con la nutrición real.
-
----
-
-## Fase 12: Deployment
-* **Objetivo**: Puesta en producción y distribución en tiendas de aplicaciones.
-* **Alcance previsto**:
-  * Configuración de entornos de staging y producción.
-  * Pipelines de CI/CD para compilación, pruebas automáticas y releases (Expo EAS).
-  * Publicación de la app móvil en Google Play Store y Apple App Store.
-  * Despliegue del backend Fastify y PostgreSQL en infraestructura en la nube.
+  * Integración de `@clerk/clerk-expo` en `apps/mobile`.
+  * Flujo visual de autenticación y pantalla de creación de personaje.
+  * Dashboard inicial del jugador consumiendo `GET /players/me`.

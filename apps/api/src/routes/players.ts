@@ -5,66 +5,121 @@ import {
   esquemaParametroIdJugador,
 } from '@chapter-one/validation';
 import {
+  ErrorAccesoDenegadoJugador,
   ErrorConflictoJugador,
   ErrorJugadorNoEncontrado,
+  ErrorPerfilJugadorRequerido,
   servicioJugadores,
 } from '../services/playerService.js';
 
 /**
- * Rutas de la API para la gestión de Jugadores (Fase 4: Vertical Slice)
+ * Rutas de la API para la gestión de Jugadores e Identidad (Fase 5)
  */
 export const rutasJugadores: FastifyPluginAsync = async (servidor) => {
   /**
-   * POST /players
-   * Crea un nuevo jugador y su registro de progreso inicial de forma atómica
+   * GET /players/me
+   * Obtiene el perfil del jugador correspondiente al usuario autenticado actual.
+   * Si el usuario en Clerk aún no ha creado un personaje, retorna 404 con PLAYER_PROFILE_REQUIRED.
    */
-  servidor.post('/players', async (solicitud, respuesta) => {
-    // Validar carga útil con Zod
-    const resultadoValidacion = esquemaCrearJugador.safeParse(solicitud.body);
-    if (!resultadoValidacion.success) {
-      return respuesta.status(400).send({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Los datos proporcionados para crear el jugador son inválidos',
-          details: resultadoValidacion.error.format(),
-        },
-      });
-    }
+  servidor.get(
+    '/players/me',
+    { preHandler: [servidor.authenticate] },
+    async (solicitud, respuesta) => {
+      try {
+        const pool = servidor.db.getPool();
+        const perfil = await servicioJugadores.obtenerMiPerfilJugador(
+          pool,
+          solicitud.authUserId,
+        );
 
-    try {
-      const pool = servidor.db.getPool();
-      const jugadorCreado = await servicioJugadores.crearJugador(pool, resultadoValidacion.data);
+        return respuesta.status(200).send({
+          success: true,
+          data: perfil,
+        });
+      } catch (error: unknown) {
+        if (error instanceof ErrorPerfilJugadorRequerido) {
+          return respuesta.status(error.statusCode).send({
+            success: false,
+            error: {
+              code: error.codigo,
+              message: error.message,
+            },
+          });
+        }
 
-      return respuesta.status(201).send({
-        success: true,
-        data: jugadorCreado,
-      });
-    } catch (error: unknown) {
-      if (error instanceof ErrorConflictoJugador) {
-        return respuesta.status(error.statusCode).send({
+        servidor.log.error(error, 'Error al obtener perfil propio del jugador');
+        return respuesta.status(500).send({
           success: false,
           error: {
-            code: error.codigo,
-            message: error.message,
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Ocurrió un error inesperado al consultar el perfil',
+          },
+        });
+      }
+    },
+  );
+
+  /**
+   * POST /players
+   * Crea un nuevo jugador y su progreso inicial de forma atómica.
+   * Requiere autenticación: el Player queda enlazado exclusivamente al authUserId del token.
+   */
+  servidor.post(
+    '/players',
+    { preHandler: [servidor.authenticate] },
+    async (solicitud, respuesta) => {
+      // Validar carga útil con Zod
+      const resultadoValidacion = esquemaCrearJugador.safeParse(solicitud.body);
+      if (!resultadoValidacion.success) {
+        return respuesta.status(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Los datos proporcionados para crear el jugador son inválidos',
+            details: resultadoValidacion.error.format(),
           },
         });
       }
 
-      servidor.log.error(error, 'Error al crear jugador');
-      return respuesta.status(500).send({
-        success: false,
-        error: {
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Ocurrió un error inesperado al procesar la solicitud',
-        },
-      });
-    }
-  });
+      try {
+        const pool = servidor.db.getPool();
+        // Se asocia inmutablemente con el authUserId del token validado
+        const jugadorCreado = await servicioJugadores.crearJugador(
+          pool,
+          resultadoValidacion.data,
+          solicitud.authUserId,
+        );
+
+        return respuesta.status(201).send({
+          success: true,
+          data: jugadorCreado,
+        });
+      } catch (error: unknown) {
+        if (error instanceof ErrorConflictoJugador) {
+          return respuesta.status(error.statusCode).send({
+            success: false,
+            error: {
+              code: error.codigo,
+              message: error.message,
+            },
+          });
+        }
+
+        servidor.log.error(error, 'Error al crear jugador');
+        return respuesta.status(500).send({
+          success: false,
+          error: {
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Ocurrió un error inesperado al procesar la solicitud',
+          },
+        });
+      }
+    },
+  );
 
   /**
    * GET /players/:id
-   * Obtiene la información del jugador y su progreso actual por su UUID
+   * Obtiene la información del jugador y su progreso actual por su UUID público.
    */
   servidor.get('/players/:id', async (solicitud, respuesta) => {
     // Validar parámetro de ruta
@@ -112,78 +167,94 @@ export const rutasJugadores: FastifyPluginAsync = async (servidor) => {
 
   /**
    * PATCH /players/:id
-   * Actualiza parcialmente los datos editables del jugador
+   * Actualiza parcialmente los datos editables del jugador.
+   * Requiere autenticación y comprueba que el usuario autenticado sea el dueño del jugador.
    */
-  servidor.patch('/players/:id', async (solicitud, respuesta) => {
-    // Validar parámetro de ruta
-    const resultadoParam = esquemaParametroIdJugador.safeParse(solicitud.params);
-    if (!resultadoParam.success) {
-      return respuesta.status(400).send({
-        success: false,
-        error: {
-          code: 'INVALID_ID_PARAMETER',
-          message: 'El identificador del jugador debe ser un UUID válido',
-          details: resultadoParam.error.format(),
-        },
-      });
-    }
-
-    // Validar cuerpo de actualización
-    const resultadoBody = esquemaActualizarJugador.safeParse(solicitud.body);
-    if (!resultadoBody.success) {
-      return respuesta.status(400).send({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Los datos proporcionados para actualizar el jugador son inválidos',
-          details: resultadoBody.error.format(),
-        },
-      });
-    }
-
-    try {
-      const pool = servidor.db.getPool();
-      const jugadorActualizado = await servicioJugadores.actualizarJugador(
-        pool,
-        resultadoParam.data.id,
-        resultadoBody.data,
-      );
-
-      return respuesta.status(200).send({
-        success: true,
-        data: jugadorActualizado,
-      });
-    } catch (error: unknown) {
-      if (error instanceof ErrorJugadorNoEncontrado) {
-        return respuesta.status(error.statusCode).send({
+  servidor.patch(
+    '/players/:id',
+    { preHandler: [servidor.authenticate] },
+    async (solicitud, respuesta) => {
+      // Validar parámetro de ruta
+      const resultadoParam = esquemaParametroIdJugador.safeParse(solicitud.params);
+      if (!resultadoParam.success) {
+        return respuesta.status(400).send({
           success: false,
           error: {
-            code: error.codigo,
-            message: error.message,
+            code: 'INVALID_ID_PARAMETER',
+            message: 'El identificador del jugador debe ser un UUID válido',
+            details: resultadoParam.error.format(),
           },
         });
       }
 
-      if (error instanceof ErrorConflictoJugador) {
-        return respuesta.status(error.statusCode).send({
+      // Validar cuerpo de actualización
+      const resultadoBody = esquemaActualizarJugador.safeParse(solicitud.body);
+      if (!resultadoBody.success) {
+        return respuesta.status(400).send({
           success: false,
           error: {
-            code: error.codigo,
-            message: error.message,
+            code: 'VALIDATION_ERROR',
+            message: 'Los datos proporcionados para actualizar el jugador son inválidos',
+            details: resultadoBody.error.format(),
           },
         });
       }
 
-      servidor.log.error(error, 'Error al actualizar jugador');
-      return respuesta.status(500).send({
-        success: false,
-        error: {
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Ocurrió un error inesperado al actualizar el jugador',
-        },
-      });
-    }
-  });
+      try {
+        const pool = servidor.db.getPool();
+        const jugadorActualizado = await servicioJugadores.actualizarJugador(
+          pool,
+          resultadoParam.data.id,
+          resultadoBody.data,
+          solicitud.authUserId,
+        );
+
+        return respuesta.status(200).send({
+          success: true,
+          data: jugadorActualizado,
+        });
+      } catch (error: unknown) {
+        if (error instanceof ErrorAccesoDenegadoJugador) {
+          return respuesta.status(error.statusCode).send({
+            success: false,
+            error: {
+              code: error.codigo,
+              message: error.message,
+            },
+          });
+        }
+
+        if (error instanceof ErrorJugadorNoEncontrado) {
+          return respuesta.status(error.statusCode).send({
+            success: false,
+            error: {
+              code: error.codigo,
+              message: error.message,
+            },
+          });
+        }
+
+        if (error instanceof ErrorConflictoJugador) {
+          return respuesta.status(error.statusCode).send({
+            success: false,
+            error: {
+              code: error.codigo,
+              message: error.message,
+            },
+          });
+        }
+
+        servidor.log.error(error, 'Error al actualizar jugador');
+        return respuesta.status(500).send({
+          success: false,
+          error: {
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Ocurrió un error inesperado al actualizar el jugador',
+          },
+        });
+      }
+    },
+  );
 };
 
 export const playerRoutes = rutasJugadores;

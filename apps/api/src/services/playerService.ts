@@ -7,7 +7,7 @@ import {
 } from '../repositories/playerRepository.js';
 
 /**
- * Clases de error de dominio para la gestión de jugadores
+ * Clases de error de dominio para la gestión de jugadores e identidad
  */
 export class ErrorJugadorNoEncontrado extends Error {
   readonly codigo = 'PLAYER_NOT_FOUND';
@@ -19,6 +19,16 @@ export class ErrorJugadorNoEncontrado extends Error {
   }
 }
 
+export class ErrorPerfilJugadorRequerido extends Error {
+  readonly codigo = 'PLAYER_PROFILE_REQUIRED';
+  readonly statusCode = 404;
+
+  constructor(authUserId: string) {
+    super(`El usuario autenticado '${authUserId}' aún no tiene un perfil de jugador creado`);
+    this.name = 'ErrorPerfilJugadorRequerido';
+  }
+}
+
 export class ErrorConflictoJugador extends Error {
   readonly codigo = 'PLAYER_CONFLICT';
   readonly statusCode = 409;
@@ -26,6 +36,16 @@ export class ErrorConflictoJugador extends Error {
   constructor(mensaje: string) {
     super(mensaje);
     this.name = 'ErrorConflictoJugador';
+  }
+}
+
+export class ErrorAccesoDenegadoJugador extends Error {
+  readonly codigo = 'FORBIDDEN';
+  readonly statusCode = 403;
+
+  constructor() {
+    super('No tienes autorización para acceder o modificar este jugador');
+    this.name = 'ErrorAccesoDenegadoJugador';
   }
 }
 
@@ -57,15 +77,32 @@ export class ServicioJugadores {
   constructor(private readonly repositorio: RepositorioJugadores = repositorioJugadores) {}
 
   /**
-   * Crea un nuevo jugador y su registro de progreso inicial de forma atómica
+   * Crea un nuevo jugador y su registro de progreso inicial de forma atómica.
+   * El authUserId proviene obligatoriamente del token validado, nunca del cliente.
    */
-  async crearJugador(pool: Pool, datos: EntradaCrearJugador): Promise<JugadorDto> {
+  async crearJugador(
+    pool: Pool,
+    datos: EntradaCrearJugador,
+    authUserIdSeguro: string,
+  ): Promise<JugadorDto> {
+    // Verificar si el usuario autenticado ya posee un jugador registrado
+    const jugadorExistente = await this.repositorio.buscarPorAuthUserId(pool, authUserIdSeguro);
+    if (jugadorExistente) {
+      throw new ErrorConflictoJugador('El usuario autenticado ya posee un perfil de jugador creado');
+    }
+
     const cliente = await pool.connect();
 
     try {
       await cliente.query('BEGIN');
 
-      const jugador = await this.repositorio.insertarJugador(cliente, datos);
+      // Se fuerza el uso del authUserIdSeguro verificado en el token
+      const datosSeguros: EntradaCrearJugador = {
+        ...datos,
+        authUserId: authUserIdSeguro,
+      };
+
+      const jugador = await this.repositorio.insertarJugador(cliente, datosSeguros, authUserIdSeguro);
       const progreso = await this.repositorio.insertarProgresoInicial(cliente, jugador.id);
 
       await cliente.query('COMMIT');
@@ -95,7 +132,7 @@ export class ServicioJugadores {
           throw new ErrorConflictoJugador(`El nombre de usuario '${datos.username}' ya está en uso`);
         }
         if (errorPg.constraint?.includes('auth_user_id') || errorPg.detail?.includes('auth_user_id')) {
-          throw new ErrorConflictoJugador(`El usuario de autenticación ya tiene un jugador asociado`);
+          throw new ErrorConflictoJugador('El usuario autenticado ya tiene un jugador asociado');
         }
         throw new ErrorConflictoJugador('Ya existe un registro con los datos únicos proporcionados');
       }
@@ -107,7 +144,7 @@ export class ServicioJugadores {
   }
 
   /**
-   * Obtiene la información de un jugador y su progreso actual por su ID
+   * Obtiene la información de un jugador y su progreso actual por su ID interno
    */
   async obtenerJugadorPorId(pool: Pool, id: string): Promise<JugadorDto> {
     const fila = await this.repositorio.buscarPorId(pool, id);
@@ -120,21 +157,46 @@ export class ServicioJugadores {
   }
 
   /**
-   * Actualiza parcialmente la información de un jugador
+   * Obtiene el perfil de jugador asociado al usuario autenticado actual (GET /players/me)
+   */
+  async obtenerMiPerfilJugador(pool: Pool, authUserId: string): Promise<JugadorDto> {
+    const fila = await this.repositorio.buscarPorAuthUserId(pool, authUserId);
+
+    if (!fila) {
+      throw new ErrorPerfilJugadorRequerido(authUserId);
+    }
+
+    return this.mapearFilaAJugadorDto(fila);
+  }
+
+  /**
+   * Actualiza parcialmente la información de un jugador verificando que el usuario autenticado sea el dueño
    */
   async actualizarJugador(
     pool: Pool,
     id: string,
     datos: EntradaActualizarJugador,
+    authUserIdSeguro: string,
   ): Promise<JugadorDto> {
-    // Verificar primero la existencia del jugador
+    // 1. Verificar existencia del jugador
     const existente = await this.repositorio.buscarPorId(pool, id);
     if (!existente) {
       throw new ErrorJugadorNoEncontrado(id);
     }
 
+    // 2. Control de acceso: el jugador debe pertenecer al usuario autenticado
+    if (existente.auth_user_id !== authUserIdSeguro) {
+      throw new ErrorAccesoDenegadoJugador();
+    }
+
     try {
-      const actualizado = await this.repositorio.actualizarJugador(pool, id, datos);
+      // No se permite cambiar el authUserId
+      const datosSaneados: EntradaActualizarJugador = {
+        displayName: datos.displayName,
+        timezone: datos.timezone,
+      };
+
+      const actualizado = await this.repositorio.actualizarJugador(pool, id, datosSaneados);
       if (!actualizado) {
         return this.mapearFilaAJugadorDto(existente);
       }
@@ -157,7 +219,7 @@ export class ServicioJugadores {
     } catch (error: unknown) {
       const errorPg = error as { code?: string; constraint?: string; detail?: string };
       if (errorPg.code === '23505') {
-        throw new ErrorConflictoJugador('El identificador de autenticación ya está asignado a otro jugador');
+        throw new ErrorConflictoJugador('Conflicto con un valor único al actualizar el jugador');
       }
       throw error;
     }

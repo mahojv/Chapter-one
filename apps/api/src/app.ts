@@ -1,5 +1,6 @@
 import cors from '@fastify/cors';
 import fastify, { type FastifyInstance } from 'fastify';
+import { pluginAutenticacion } from './plugins/auth.js';
 import { pluginBaseDatos } from './plugins/database.js';
 import { rutasSalud } from './routes/health.js';
 import { rutasJugadores } from './routes/players.js';
@@ -24,6 +25,9 @@ export function construirApp(opciones: OpcionesConstruccionApp = { logger: true 
 
   // Registrar plugin de conexión a PostgreSQL
   aplicacion.register(pluginBaseDatos);
+
+  // Registrar plugin de autenticación (JWKS / Clerk)
+  aplicacion.register(pluginAutenticacion);
 
   // Registrar rutas del sistema
   aplicacion.register(rutasSalud);

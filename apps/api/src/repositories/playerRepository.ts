@@ -44,6 +44,7 @@ export class RepositorioJugadores {
   async insertarJugador(
     cliente: PoolClient,
     datos: EntradaCrearJugador,
+    authUserIdSeguro?: string,
   ): Promise<FilaJugador> {
     const consulta = `
       INSERT INTO players (auth_user_id, username, display_name, timezone)
@@ -51,7 +52,7 @@ export class RepositorioJugadores {
       RETURNING id, auth_user_id, username, display_name, timezone, created_at, updated_at
     `;
     const valores = [
-      datos.authUserId || null,
+      authUserIdSeguro || datos.authUserId || null,
       datos.username,
       datos.displayName,
       datos.timezone || 'UTC',
@@ -122,6 +123,36 @@ export class RepositorioJugadores {
   }
 
   /**
+   * Obtiene un jugador por su identificador de autenticación externo (auth_user_id)
+   */
+  async buscarPorAuthUserId(
+    ejecutor: EjecutorSql,
+    authUserId: string,
+  ): Promise<FilaJugadorConProgreso | null> {
+    const consulta = `
+      SELECT
+        p.id,
+        p.auth_user_id,
+        p.username,
+        p.display_name,
+        p.timezone,
+        p.created_at,
+        p.updated_at,
+        COALESCE(pp.total_xp, 0) AS total_xp,
+        COALESCE(pp.current_level, 1) AS current_level,
+        COALESCE(pp.unspent_skill_points, 0) AS unspent_skill_points,
+        COALESCE(pp.total_skill_points_earned, 0) AS total_skill_points_earned,
+        pp.updated_at AS progress_updated_at
+      FROM players p
+      LEFT JOIN player_progress pp ON p.id = pp.player_id
+      WHERE p.auth_user_id = $1
+    `;
+
+    const resultado = await ejecutor.query<FilaJugadorConProgreso>(consulta, [authUserId]);
+    return resultado.rows[0] || null;
+  }
+
+  /**
    * Busca un jugador por su nombre de usuario (para validar unicidad previa si fuera necesario)
    */
   async buscarPorUsername(
@@ -157,11 +188,6 @@ export class RepositorioJugadores {
     if (datos.timezone !== undefined) {
       campos.push(`timezone = $${indice++}`);
       valores.push(datos.timezone);
-    }
-
-    if (datos.authUserId !== undefined) {
-      campos.push(`auth_user_id = $${indice++}`);
-      valores.push(datos.authUserId);
     }
 
     if (campos.length === 0) {

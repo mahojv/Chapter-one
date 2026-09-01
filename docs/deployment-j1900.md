@@ -74,6 +74,11 @@ API_HOST=0.0.0.0
 POSTGRES_DB=chapter_one_prod
 POSTGRES_USER=chapter_one
 POSTGRES_PASSWORD=TU_CONTRASENA_SUPER_SEGURA_AQUI
+
+# Autenticación Clerk / JWKS
+AUTH_JWKS_URI=https://<tu-instancia>.clerk.accounts.dev/.well-known/jwks.json
+AUTH_ISSUER=https://<tu-instancia>.clerk.accounts.dev
+AUTH_MOCK=false
 ```
 
 > [!CAUTION]
