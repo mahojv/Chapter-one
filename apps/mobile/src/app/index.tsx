@@ -1,98 +1,99 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+import React from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AuthScreen } from '@/components/auth/AuthScreen';
+import { OnboardingScreen } from '@/components/auth/OnboardingScreen';
+import { PlayerDashboard } from '@/components/dashboard/PlayerDashboard';
+import { usePlayer } from '@/context/PlayerContext';
 
 export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+  const { estado, errorMensaje, recargarPerfil } = usePlayer();
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+  if (estado === 'CARGANDO') {
+    return (
+      <View style={styles.contenedorCentrado}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+        <Text style={styles.textoCargando}>Sincronizando identidad del jugador...</Text>
+      </View>
+    );
+  }
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+  if (estado === 'NO_AUTENTICADO') {
+    return <AuthScreen />;
+  }
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
-  );
+  if (estado === 'REQUIERE_ONBOARDING') {
+    return <OnboardingScreen />;
+  }
+
+  if (estado === 'CON_JUGADOR') {
+    return <PlayerDashboard />;
+  }
+
+  if (estado === 'ERROR') {
+    return (
+      <View style={styles.contenedorCentrado}>
+        <View style={styles.cajaError}>
+          <Text style={styles.tituloError}>Error de Comunicación</Text>
+          <Text style={styles.textoError}>
+            {errorMensaje || 'No fue posible sincronizar los datos con el servidor.'}
+          </Text>
+          <Pressable style={styles.botonReintentar} onPress={recargarPerfil}>
+            <Text style={styles.textoBotonReintentar}>Reintentar</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  return null;
 }
 
 const styles = StyleSheet.create({
-  container: {
+  contenedorCentrado: {
     flex: 1,
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+    padding: 24,
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
+  textoCargando: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#94A3B8',
     textAlign: 'center',
   },
-  code: {
-    textTransform: 'uppercase',
+  cajaError: {
+    maxWidth: 400,
+    width: '100%',
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    alignItems: 'center',
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  tituloError: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FCA5A5',
+    marginBottom: 8,
+  },
+  textoError: {
+    fontSize: 13,
+    color: '#CBD5E1',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  botonReintentar: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  textoBotonReintentar: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });

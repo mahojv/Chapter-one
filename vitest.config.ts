@@ -7,11 +7,11 @@ export default defineConfig({
     include: [
       'packages/**/*.test.ts',
       'apps/api/**/*.test.ts',
+      'apps/mobile/src/**/*.test.ts',
     ],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      'apps/mobile/**',
     ],
   },
 });
