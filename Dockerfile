@@ -48,6 +48,7 @@ ENV API_HOST=0.0.0.0
 # Copiar árbol de dependencias podadas y paquetes del monorepo
 COPY --from=builder /app/package.json /app/package-lock.json /app/
 COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/apps/api/node_modules /app/apps/api/node_modules
 COPY --from=builder /app/packages/types /app/packages/types
 COPY --from=builder /app/packages/validation /app/packages/validation
 
