@@ -38,9 +38,66 @@ export function AuthScreen() {
 
       if (intento.status === 'complete') {
         await setActiveSignIn({ session: intento.createdSessionId });
-      } else {
-        setMensajeError('El inicio de sesión requiere pasos adicionales.');
+        return;
       }
+
+      if (intento.status === 'needs_first_factor') {
+        const factorPassword = intento.supportedFirstFactors?.find(
+          (factor) => factor.strategy === 'password'
+        );
+
+        if (factorPassword && password.trim()) {
+          const intentoPassword = await signIn.attemptFirstFactor({
+            strategy: 'password',
+            password,
+          });
+
+          if (intentoPassword.status === 'complete') {
+            await setActiveSignIn({ session: intentoPassword.createdSessionId });
+            return;
+          }
+        }
+
+        const factorEmail = intento.supportedFirstFactors?.find(
+          (factor) => factor.strategy === 'email_code'
+        );
+
+        if (factorEmail && 'emailAddressId' in factorEmail && typeof factorEmail.emailAddressId === 'string') {
+          await signIn.prepareFirstFactor({
+            strategy: 'email_code',
+            emailAddressId: factorEmail.emailAddressId,
+          });
+          setEsperandoVerificacion(true);
+          return;
+        }
+
+        setMensajeError('Se requiere un factor de autenticación adicional no soportado.');
+        return;
+      }
+
+      if (intento.status === 'needs_second_factor') {
+        const factorEmail2FA = intento.supportedSecondFactors?.find(
+          (factor) => factor.strategy === 'email_code'
+        );
+
+        if (factorEmail2FA) {
+          await signIn.prepareSecondFactor({
+            strategy: 'email_code',
+          });
+          setEsperandoVerificacion(true);
+          return;
+        }
+
+        setMensajeError('La cuenta requiere un segundo factor no soportado en esta pantalla.');
+        return;
+      }
+
+      if (intento.status === 'needs_new_password') {
+        setMensajeError('La cuenta requiere establecer una nueva contraseña antes de iniciar sesión.');
+        return;
+      }
+
+      setMensajeError(`Estado de inicio de sesión no completado: ${intento.status}`);
     } catch (error: unknown) {
       console.error('Error al iniciar sesión:', error);
       const err = error as { errors?: Array<{ message: string }> };
@@ -74,19 +131,40 @@ export function AuthScreen() {
   };
 
   const handleVerificarCodigo = async () => {
-    if (!signUpLoaded || cargando) return;
+    if (cargando) return;
     setCargando(true);
     setMensajeError(null);
 
     try {
-      const intento = await signUp.attemptEmailAddressVerification({
-        code: codigoVerificacion.trim(),
-      });
+      if (esRegistro) {
+        if (!signUpLoaded) return;
+        const intento = await signUp.attemptEmailAddressVerification({
+          code: codigoVerificacion.trim(),
+        });
 
-      if (intento.status === 'complete') {
-        await setActiveSignUp({ session: intento.createdSessionId });
+        if (intento.status === 'complete') {
+          await setActiveSignUp({ session: intento.createdSessionId });
+        } else {
+          setMensajeError('El código ingresado no pudo ser verificado');
+        }
       } else {
-        setMensajeError('El código ingresado no pudo ser verificado');
+        if (!signInLoaded) return;
+        const intento =
+          signIn.status === 'needs_second_factor'
+            ? await signIn.attemptSecondFactor({
+                strategy: 'email_code',
+                code: codigoVerificacion.trim(),
+              })
+            : await signIn.attemptFirstFactor({
+                strategy: 'email_code',
+                code: codigoVerificacion.trim(),
+              });
+
+        if (intento.status === 'complete') {
+          await setActiveSignIn({ session: intento.createdSessionId });
+        } else {
+          setMensajeError('El código ingresado no pudo ser verificado');
+        }
       }
     } catch (error: unknown) {
       console.error('Error al verificar código:', error);
