@@ -140,7 +140,18 @@ const pluginAutenticacionAsync: FastifyPluginAsync = async (servidor) => {
         });
       }
 
-      servidor.log.warn({ error }, 'Fallo inesperado durante la verificación del token');
+      const errObj = error instanceof Error ? error : new Error(String(error));
+      const errorDetallado = {
+        name: errObj.name,
+        message: errObj.message,
+        code: 'code' in errObj ? (errObj as { code: unknown }).code : undefined,
+        cause: errObj.cause instanceof Error ? { name: errObj.cause.name, message: errObj.cause.message } : errObj.cause,
+        claim: 'claim' in errObj ? (errObj as { claim: unknown }).claim : undefined,
+        reason: 'reason' in errObj ? (errObj as { reason: unknown }).reason : undefined,
+        stack: errObj.stack,
+      };
+
+      servidor.log.warn(errorDetallado, 'Fallo inesperado durante la verificación del token');
       return respuesta.status(401).send({
         success: false,
         error: {
