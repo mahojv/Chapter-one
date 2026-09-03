@@ -21,7 +21,7 @@ COPY scripts/prune-lockfile.js ./scripts/
 RUN node scripts/prune-lockfile.js
 
 # Instalación limpia, rápida y determinista de dependencias de la API según el lockfile aislado
-RUN npm ci --no-audit --no-fund
+RUN npm install --no-audit --no-fund
 
 # Copiar código fuente de los paquetes requeridos por la API
 COPY packages/types/src ./packages/types/src
