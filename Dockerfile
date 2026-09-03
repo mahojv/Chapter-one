@@ -10,18 +10,15 @@ FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Copiar manifiestos de paquetes y script de podado del monorepo
+# Copiar manifiestos de paquetes del monorepo
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/types/package.json packages/types/tsconfig.json ./packages/types/
 COPY packages/validation/package.json packages/validation/tsconfig.json ./packages/validation/
 COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
-COPY scripts/prune-lockfile.js ./scripts/
+COPY apps/mobile/package.json ./apps/mobile/
 
-# Aislar manifiesto y lockfile dentro del contenedor para excluir el workspace móvil (apps/mobile)
-RUN node scripts/prune-lockfile.js
-
-# Instalación limpia, rápida y determinista de dependencias de la API según el lockfile aislado
-RUN npm install --no-audit --no-fund
+# Instalación determinista en el ámbito del workspace de la API
+RUN npm ci --workspace=@chapter-one/api --include-workspace-root --no-audit --no-fund
 
 # Copiar código fuente de los paquetes requeridos por la API
 COPY packages/types/src ./packages/types/src
