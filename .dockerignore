@@ -7,8 +7,7 @@ npm-debug.log*
 .gitignore
 
 # Frontend Mobile (not needed for API container)
-apps/mobile/*
-!apps/mobile/package.json
+apps/mobile/
 
 # Build artifacts and caches
 dist/

@@ -10,15 +10,26 @@ FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Copiar manifiestos de paquetes del monorepo
+# Copiar manifiestos de paquetes del monorepo requeridos por la API
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/types/package.json packages/types/tsconfig.json ./packages/types/
 COPY packages/validation/package.json packages/validation/tsconfig.json ./packages/validation/
 COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
-COPY apps/mobile/package.json ./apps/mobile/
 
-# Instalación limpia y determinista de dependencias según el lockfile del monorepo
-RUN npm ci --workspace=@chapter-one/api --workspace=@chapter-one/types --workspace=@chapter-one/validation --include-workspace-root --no-audit --no-fund
+# Aislar manifiesto y lockfile dentro del contenedor para excluir el workspace móvil (apps/mobile)
+RUN node -e "\
+  const fs = require('fs'); \
+  const pkg = JSON.parse(fs.readFileSync('package.json')); \
+  pkg.workspaces = ['apps/api', 'packages/types', 'packages/validation']; \
+  fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)); \
+  const lock = JSON.parse(fs.readFileSync('package-lock.json')); \
+  if (lock.packages['']) lock.packages[''].workspaces = ['apps/api', 'packages/types', 'packages/validation']; \
+  delete lock.packages['apps/mobile']; \
+  for (const k of Object.keys(lock.packages)) { if (k.startsWith('apps/mobile/')) delete lock.packages[k]; } \
+  fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2));"
+
+# Instalación limpia, rápida y determinista de dependencias de la API según el lockfile aislado
+RUN npm ci --no-audit --no-fund
 
 # Copiar código fuente de los paquetes requeridos por la API
 COPY packages/types/src ./packages/types/src
