@@ -4,21 +4,31 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Etapa 1: Builder (Instalación de dependencias y compilación de TypeScript)
+# Etapa 1: Builder (Entorno de compilación aislado para el Backend)
 # -----------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Copiar manifiestos de paquetes del monorepo
-COPY package.json package-lock.json tsconfig.base.json ./
+# Copiar configuraciones y manifiestos de los paquetes del backend
+COPY tsconfig.base.json ./
 COPY packages/types/package.json packages/types/tsconfig.json ./packages/types/
 COPY packages/validation/package.json packages/validation/tsconfig.json ./packages/validation/
 COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
-COPY apps/mobile/package.json ./apps/mobile/
 
-# Instalación determinista en el ámbito del workspace de la API
-RUN npm ci --workspace=@chapter-one/api --include-workspace-root --no-audit --no-fund
+# Crear un manifiesto de workspace exclusivo para el backend (sin incluir apps/mobile)
+RUN node -e "\
+  const fs = require('fs'); \
+  const pkg = { \
+    name: 'chapter-one-backend', \
+    private: true, \
+    type: 'module', \
+    workspaces: ['apps/api', 'packages/types', 'packages/validation'] \
+  }; \
+  fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));"
+
+# Instalación limpia en el entorno aislado (npm generará un lockfile efímero únicamente con dependencias del backend)
+RUN npm install --no-audit --no-fund
 
 # Copiar código fuente de los paquetes requeridos por la API
 COPY packages/types/src ./packages/types/src
@@ -47,7 +57,7 @@ ENV API_PORT=3001
 ENV API_HOST=0.0.0.0
 
 # Copiar árbol de dependencias podadas y paquetes del monorepo
-COPY --from=builder /app/package.json /app/package-lock.json /app/
+COPY --from=builder /app/package.json /app/
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/apps/api/node_modules /app/apps/api/node_modules
 COPY --from=builder /app/packages/types /app/packages/types
@@ -57,7 +67,7 @@ COPY --from=builder /app/packages/validation /app/packages/validation
 COPY --from=builder /app/apps/api/package.json ./package.json
 COPY --from=builder /app/apps/api/dist ./dist
 
-# Utilizar usuario sin privilegios de root incluido en node:alpine para mayor seguridad
+# Utilizar usuario sin privilegios de root
 USER node
 
 # Exponer el puerto interno de la API
