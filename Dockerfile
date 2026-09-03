@@ -10,11 +10,12 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copiar manifiestos de paquetes del monorepo (excluyendo apps/mobile)
+# Copiar manifiestos de paquetes del monorepo
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/types/package.json packages/types/tsconfig.json ./packages/types/
 COPY packages/validation/package.json packages/validation/tsconfig.json ./packages/validation/
 COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
+COPY apps/mobile/package.json ./apps/mobile/
 
 # Instalación limpia y determinista de dependencias según el lockfile del monorepo
 RUN npm ci --no-audit --no-fund
