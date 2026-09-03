@@ -6,7 +6,7 @@
 # -----------------------------------------------------------------------------
 # Etapa 1: Builder (Instalación de dependencias y compilación de TypeScript)
 # -----------------------------------------------------------------------------
-FROM node:22-alpine AS builder
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -38,7 +38,7 @@ RUN npm prune --omit=dev --no-audit --no-fund
 # -----------------------------------------------------------------------------
 # Etapa 2: Runner (Entorno de ejecución de producción minimalista)
 # -----------------------------------------------------------------------------
-FROM node:22-alpine AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app/apps/api
 
