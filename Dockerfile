@@ -18,7 +18,7 @@ COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
 COPY apps/mobile/package.json ./apps/mobile/
 
 # Instalación limpia y determinista de dependencias según el lockfile del monorepo
-RUN npm ci --no-audit --no-fund
+RUN npm ci --workspace=@chapter-one/api --workspace=@chapter-one/types --workspace=@chapter-one/validation --include-workspace-root --no-audit --no-fund
 
 # Copiar código fuente de los paquetes requeridos por la API
 COPY packages/types/src ./packages/types/src
