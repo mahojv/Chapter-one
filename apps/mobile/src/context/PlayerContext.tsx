@@ -1,5 +1,5 @@
 import { useAuth } from '@clerk/clerk-expo';
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { clienteApi, type DatosCrearJugador, ErrorApi, type Jugador } from '../services/api';
 
 export type EstadoIdentidad =
@@ -21,48 +21,71 @@ interface ContextoJugadorValor {
 const ContextoJugador = createContext<ContextoJugadorValor | undefined>(undefined);
 
 export function ProveedorJugador({ children }: { children: React.ReactNode }) {
-  const { isLoaded, isSignedIn, getToken, signOut } = useAuth();
+  const { isLoaded, isSignedIn, userId, getToken, signOut } = useAuth();
   const [estado, setEstado] = useState<EstadoIdentidad>('CARGANDO');
   const [jugador, setJugador] = useState<Jugador | null>(null);
   const [errorMensaje, setErrorMensaje] = useState<string | null>(null);
 
-  const cargarPerfil = useCallback(async () => {
-    if (!isLoaded) {
-      setEstado('CARGANDO');
-      return;
-    }
+  // Mantenemos una referencia mutable a getToken para evitar bucles causados por instancias inestables de la función de Clerk
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
-    if (!isSignedIn) {
-      setEstado('NO_AUTENTICADO');
-      setJugador(null);
-      setErrorMensaje(null);
-      return;
-    }
+  // Rastrea el último userId de Clerk procesado para prevenir peticiones HTTP redundantes o bucles
+  const ultimoUserIdProcesadoRef = useRef<string | null>(null);
 
-    setEstado('CARGANDO');
-    setErrorMensaje(null);
-
-    try {
-      const perfil = await clienteApi.obtenerMiPerfil(getToken);
-      setJugador(perfil);
-      setEstado('CON_JUGADOR');
-    } catch (error: unknown) {
-      if (error instanceof ErrorApi && error.code === 'PLAYER_PROFILE_REQUIRED') {
-        setJugador(null);
-        setEstado('REQUIERE_ONBOARDING');
+  const cargarPerfil = useCallback(
+    async (forzar = false) => {
+      if (!isLoaded) {
+        setEstado('CARGANDO');
         return;
       }
 
-      console.error('Error al cargar perfil de jugador:', error);
-      const mensaje =
-        error instanceof Error ? error.message : 'Error inesperado al conectar con el servidor';
-      setErrorMensaje(mensaje);
-      setEstado('ERROR');
-    }
-  }, [isLoaded, isSignedIn, getToken]);
+      if (!isSignedIn || !userId) {
+        setEstado('NO_AUTENTICADO');
+        setJugador(null);
+        setErrorMensaje(null);
+        ultimoUserIdProcesadoRef.current = null;
+        return;
+      }
+
+      // Prevenir bucles infinitos: si no es forzado y ya consultamos la API para este mismo userId, omitir re-consulta
+      if (!forzar && ultimoUserIdProcesadoRef.current === userId) {
+        return;
+      }
+
+      ultimoUserIdProcesadoRef.current = userId;
+      setEstado('CARGANDO');
+      setErrorMensaje(null);
+
+      try {
+        const perfil = await clienteApi.obtenerMiPerfil(() => getTokenRef.current());
+        setJugador(perfil);
+        setEstado('CON_JUGADOR');
+      } catch (error: unknown) {
+        if (error instanceof ErrorApi && error.code === 'PLAYER_PROFILE_REQUIRED') {
+          setJugador(null);
+          setEstado('REQUIERE_ONBOARDING');
+          return;
+        }
+
+        console.error('Error al cargar perfil de jugador:', error);
+        const mensaje =
+          error instanceof Error ? error.message : 'Error inesperado al conectar con el servidor';
+        setErrorMensaje(mensaje);
+        setEstado('ERROR');
+      }
+    },
+    [isLoaded, isSignedIn, userId],
+  );
 
   useEffect(() => {
     cargarPerfil();
+  }, [cargarPerfil]);
+
+  const recargarPerfil = useCallback(async () => {
+    await cargarPerfil(true);
   }, [cargarPerfil]);
 
   const crearPersonaje = useCallback(
@@ -71,9 +94,9 @@ export function ProveedorJugador({ children }: { children: React.ReactNode }) {
       setErrorMensaje(null);
 
       try {
-        await clienteApi.crearJugador(getToken, datos);
+        await clienteApi.crearJugador(() => getTokenRef.current(), datos);
         // Tras creación exitosa, consultar /players/me para validar sincronización
-        await cargarPerfil();
+        await cargarPerfil(true);
       } catch (error: unknown) {
         console.error('Error al crear personaje:', error);
         const mensaje =
@@ -87,7 +110,7 @@ export function ProveedorJugador({ children }: { children: React.ReactNode }) {
         throw error;
       }
     },
-    [getToken, cargarPerfil],
+    [cargarPerfil],
   );
 
   const cerrarSesion = useCallback(async () => {
@@ -95,6 +118,7 @@ export function ProveedorJugador({ children }: { children: React.ReactNode }) {
     await signOut();
     setJugador(null);
     setErrorMensaje(null);
+    ultimoUserIdProcesadoRef.current = null;
     setEstado('NO_AUTENTICADO');
   }, [signOut]);
 
@@ -104,7 +128,7 @@ export function ProveedorJugador({ children }: { children: React.ReactNode }) {
         estado,
         jugador,
         errorMensaje,
-        recargarPerfil: cargarPerfil,
+        recargarPerfil,
         crearPersonaje,
         cerrarSesion,
       }}>

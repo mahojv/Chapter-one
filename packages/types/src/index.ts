@@ -51,3 +51,71 @@ export interface PaginatedResponse<T> {
   totalPages: number;
 }
 export type RespuestaPaginada<T> = PaginatedResponse<T>;
+
+// -----------------------------------------------------------------------------
+// Contratos genéricos de Progresión RPG
+// -----------------------------------------------------------------------------
+
+export interface ProgressionDetails {
+  currentLevel: number;
+  totalXp: number;
+  currentLevelXpFloor: number;
+  nextLevelXpThreshold: number;
+  xpInCurrentLevel: number;
+  xpNeededForNextLevel: number;
+  progressPercentage: number;
+}
+export type DetallesProgreso = ProgressionDetails;
+
+export interface XpGainResult {
+  previousTotalXp: number;
+  newTotalXp: number;
+  previousLevel: number;
+  newLevel: number;
+  xpGained: number;
+  didLevelUp: boolean;
+  levelsGained: number;
+  progress: ProgressionDetails;
+}
+export type ResultadoGananciaXp = XpGainResult;
+
+export type ProgressEventType =
+  | 'WORKOUT_COMPLETED'
+  | 'HABIT_COMPLETED'
+  | 'QUEST_COMPLETED'
+  | 'ACHIEVEMENT_UNLOCKED'
+  | 'SKILL_XP_GAINED'
+  | 'LEVEL_UP'
+  | 'PERSONAL_RECORD'
+  | 'REST_DAY_LOGGED'
+  | 'SKILL_DECAY_CALCULATED'
+  | 'ATTRIBUTE_PROGRESS';
+export type TipoEventoProgreso = ProgressEventType;
+
+export interface GrantXpInput {
+  playerId: string;
+  xpDelta: number;
+  eventType?: ProgressEventType;
+  sourceEntityType?: string;
+  sourceEntityId?: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+export type EntradaOtorgarXp = GrantXpInput;
+
+export interface GrantXpResult {
+  playerId: string;
+  previousTotalXp: number;
+  newTotalXp: number;
+  previousLevel: number;
+  newLevel: number;
+  xpGained: number;
+  didLevelUp: boolean;
+  levelsGained: number;
+  skillPointsGained: number;
+  unspentSkillPoints: number;
+  totalSkillPointsEarned: number;
+  eventId: string;
+  progress: ProgressionDetails;
+}
+export type ResultadoOtorgarXp = GrantXpResult;

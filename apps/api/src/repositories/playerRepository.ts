@@ -32,6 +32,19 @@ export interface FilaJugadorConProgreso extends FilaJugador {
   progress_updated_at: Date;
 }
 
+export interface FilaEventoProgreso {
+  id: string;
+  player_id: string;
+  event_type: string;
+  source_entity_type: string;
+  source_entity_id: string;
+  xp_delta: number;
+  skill_points_delta: number;
+  reward_id: string | null;
+  metadata: Record<string, unknown>;
+  occurred_at: Date;
+}
+
 export type EjecutorSql = Pool | PoolClient;
 
 /**
@@ -89,6 +102,131 @@ export class RepositorioJugadores {
     `;
 
     const resultado = await cliente.query<FilaProgresoJugador>(consulta, [jugadorId]);
+    return resultado.rows[0];
+  }
+
+  /**
+   * Obtiene la fila de progreso de un jugador adquiriendo un bloqueo exclusivo (FOR UPDATE)
+   */
+  async obtenerProgresoConBloqueo(
+    ejecutor: EjecutorSql,
+    playerId: string,
+  ): Promise<FilaProgresoJugador | null> {
+    const consulta = `
+      SELECT
+        player_id,
+        total_xp,
+        current_level,
+        unspent_skill_points,
+        total_skill_points_earned,
+        last_level_up_at,
+        updated_at
+      FROM player_progress
+      WHERE player_id = $1
+      FOR UPDATE;
+    `;
+
+    const resultado = await ejecutor.query<FilaProgresoJugador>(consulta, [playerId]);
+    return resultado.rows[0] || null;
+  }
+
+  /**
+   * Actualiza el registro de progreso de un jugador dentro de una transacción activa
+   */
+  async actualizarProgreso(
+    ejecutor: EjecutorSql,
+    datos: {
+      playerId: string;
+      totalXp: number;
+      currentLevel: number;
+      unspentSkillPoints: number;
+      totalSkillPointsEarned: number;
+      huboSubidaNivel: boolean;
+    },
+  ): Promise<FilaProgresoJugador> {
+    const consulta = `
+      UPDATE player_progress
+      SET
+        total_xp = $2,
+        current_level = $3,
+        unspent_skill_points = $4,
+        total_skill_points_earned = $5,
+        last_level_up_at = CASE WHEN $6::boolean THEN NOW() ELSE last_level_up_at END,
+        updated_at = NOW()
+      WHERE player_id = $1
+      RETURNING
+        player_id,
+        total_xp,
+        current_level,
+        unspent_skill_points,
+        total_skill_points_earned,
+        last_level_up_at,
+        updated_at;
+    `;
+
+    const valores = [
+      datos.playerId,
+      datos.totalXp,
+      datos.currentLevel,
+      datos.unspentSkillPoints,
+      datos.totalSkillPointsEarned,
+      datos.huboSubidaNivel,
+    ];
+
+    const resultado = await ejecutor.query<FilaProgresoJugador>(consulta, valores);
+    return resultado.rows[0];
+  }
+
+  /**
+   * Inserta un evento de auditoría en la tabla progress_events dentro de una transacción activa
+   */
+  async insertarEventoProgreso(
+    ejecutor: EjecutorSql,
+    datos: {
+      playerId: string;
+      eventType: string;
+      sourceEntityType: string;
+      sourceEntityId: string;
+      xpDelta: number;
+      skillPointsDelta: number;
+      metadata: Record<string, unknown>;
+    },
+  ): Promise<FilaEventoProgreso> {
+    const consulta = `
+      INSERT INTO progress_events (
+        player_id,
+        event_type,
+        source_entity_type,
+        source_entity_id,
+        xp_delta,
+        skill_points_delta,
+        metadata
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+      RETURNING
+        id,
+        player_id,
+        event_type,
+        source_entity_type,
+        source_entity_id,
+        xp_delta,
+        skill_points_delta,
+        reward_id,
+        metadata,
+        occurred_at;
+    `;
+
+    const valores = [
+      datos.playerId,
+      datos.eventType,
+      datos.sourceEntityType,
+      datos.sourceEntityId,
+      datos.xpDelta,
+      datos.skillPointsDelta,
+      JSON.stringify(datos.metadata),
+    ];
+
+    const resultado = await ejecutor.query<FilaEventoProgreso>(consulta, valores);
     return resultado.rows[0];
   }
 

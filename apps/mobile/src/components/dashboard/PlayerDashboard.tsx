@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,10 +13,21 @@ import { usePlayer } from '../../context/PlayerContext';
 
 export function PlayerDashboard() {
   const { jugador, cerrarSesion, recargarPerfil } = usePlayer();
+  const [cargandoRecarga, setCargandoRecarga] = useState(false);
 
   if (!jugador) {
     return null;
   }
+
+  const manejarRecargar = async () => {
+    if (cargandoRecarga) return;
+    setCargandoRecarga(true);
+    try {
+      await recargarPerfil();
+    } finally {
+      setCargandoRecarga(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.areaSegura}>
@@ -67,8 +79,15 @@ export function PlayerDashboard() {
 
         {/* Acciones de Cuenta */}
         <View style={styles.tarjetaAcciones}>
-          <Pressable style={styles.botonRecargar} onPress={recargarPerfil}>
-            <Text style={styles.textoBotonRecargar}>Actualizar Ficha</Text>
+          <Pressable
+            style={[styles.botonRecargar, cargandoRecarga && styles.botonDeshabilitado]}
+            onPress={manejarRecargar}
+            disabled={cargandoRecarga}>
+            {cargandoRecarga ? (
+              <ActivityIndicator size="small" color="#E2E8F0" />
+            ) : (
+              <Text style={styles.textoBotonRecargar}>Actualizar Ficha</Text>
+            )}
           </Pressable>
 
           <Pressable style={styles.botonCerrarSesion} onPress={cerrarSesion}>
@@ -186,6 +205,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
+  },
+  botonDeshabilitado: {
+    opacity: 0.6,
   },
   textoBotonRecargar: {
     color: '#E2E8F0',

@@ -1,5 +1,10 @@
 import type { Pool } from 'pg';
+import type { EntradaOtorgarXp, ResultadoOtorgarXp } from '@chapter-one/types';
 import type { EntradaActualizarJugador, EntradaCrearJugador } from '@chapter-one/validation';
+import {
+  aplicarGananciaXp,
+  ErrorMatematicaProgreso,
+} from '../domain/progression/progressionEngine.js';
 import {
   type FilaJugadorConProgreso,
   repositorioJugadores,
@@ -241,6 +246,102 @@ export class ServicioJugadores {
       createdAt: fila.created_at.toISOString(),
       updatedAt: fila.updated_at.toISOString(),
     };
+  }
+
+  /**
+   * Operación centralizada para otorgar XP a un jugador dentro de una transacción atómica protegida contra concurrencia (FOR UPDATE)
+   */
+  async otorgarXp(pool: Pool, entrada: EntradaOtorgarXp): Promise<ResultadoOtorgarXp> {
+    if (
+      typeof entrada.xpDelta !== 'number' ||
+      !Number.isFinite(entrada.xpDelta) ||
+      entrada.xpDelta < 0
+    ) {
+      throw new ErrorMatematicaProgreso(
+        `La ganancia de experiencia (xpDelta) debe ser un número entero no negativo. Valor recibido: ${entrada.xpDelta}`,
+      );
+    }
+
+    const cliente = await pool.connect();
+
+    try {
+      await cliente.query('BEGIN');
+
+      // 1. Obtener progreso actual con bloqueo exclusivo de fila FOR UPDATE
+      const progresoActual = await this.repositorio.obtenerProgresoConBloqueo(
+        cliente,
+        entrada.playerId,
+      );
+      if (!progresoActual) {
+        throw new ErrorJugadorNoEncontrado(entrada.playerId);
+      }
+
+      const xpActual = Number(progresoActual.total_xp);
+
+      // 2. Ejecutar cálculo puro con el motor de progresión
+      const resultadoEngine = aplicarGananciaXp(xpActual, entrada.xpDelta);
+
+      // 3. Regla de negocio: 1 skill point por cada nivel ganado
+      const puntosHabilidadGanados = resultadoEngine.levelsGained * 1;
+      const nuevosPuntosDisponibles = progresoActual.unspent_skill_points + puntosHabilidadGanados;
+      const nuevosPuntosTotalesGanados =
+        progresoActual.total_skill_points_earned + puntosHabilidadGanados;
+
+      // 4. Actualizar player_progress en PostgreSQL
+      const progresoActualizado = await this.repositorio.actualizarProgreso(cliente, {
+        playerId: entrada.playerId,
+        totalXp: resultadoEngine.newTotalXp,
+        currentLevel: resultadoEngine.newLevel,
+        unspentSkillPoints: nuevosPuntosDisponibles,
+        totalSkillPointsEarned: nuevosPuntosTotalesGanados,
+        huboSubidaNivel: resultadoEngine.didLevelUp,
+      });
+
+      // 5. Preparar metadata auditable del evento (incluyendo level-up si ocurrió)
+      const metadataEvento: Record<string, unknown> = {
+        ...(entrada.metadata || {}),
+        previousLevel: resultadoEngine.previousLevel,
+        newLevel: resultadoEngine.newLevel,
+        levelsGained: resultadoEngine.levelsGained,
+      };
+      if (entrada.reason) {
+        metadataEvento.reason = entrada.reason;
+      }
+
+      // 6. Registrar en progress_events
+      const eventoRegistrado = await this.repositorio.insertarEventoProgreso(cliente, {
+        playerId: entrada.playerId,
+        eventType: entrada.eventType || 'SKILL_XP_GAINED',
+        sourceEntityType: entrada.sourceEntityType || 'SYSTEM',
+        sourceEntityId: entrada.sourceEntityId || entrada.playerId,
+        xpDelta: resultadoEngine.xpGained,
+        skillPointsDelta: puntosHabilidadGanados,
+        metadata: metadataEvento,
+      });
+
+      await cliente.query('COMMIT');
+
+      return {
+        playerId: entrada.playerId,
+        previousTotalXp: resultadoEngine.previousTotalXp,
+        newTotalXp: resultadoEngine.newTotalXp,
+        previousLevel: resultadoEngine.previousLevel,
+        newLevel: resultadoEngine.newLevel,
+        xpGained: resultadoEngine.xpGained,
+        didLevelUp: resultadoEngine.didLevelUp,
+        levelsGained: resultadoEngine.levelsGained,
+        skillPointsGained: puntosHabilidadGanados,
+        unspentSkillPoints: progresoActualizado.unspent_skill_points,
+        totalSkillPointsEarned: progresoActualizado.total_skill_points_earned,
+        eventId: eventoRegistrado.id,
+        progress: resultadoEngine.progress,
+      };
+    } catch (error: unknown) {
+      await cliente.query('ROLLBACK');
+      throw error;
+    } finally {
+      cliente.release();
+    }
   }
 }
 

@@ -7,6 +7,9 @@
     "apps/*",
     "packages/*"
   ],
+  "dependencies": {
+    "expo-router": "~57.0.17"
+  },
   "scripts": {
     "lint": "eslint .",
     "typecheck": "npm run typecheck --workspaces --if-present",
