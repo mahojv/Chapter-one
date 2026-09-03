@@ -12,8 +12,11 @@ import { Spacing } from '@/constants/theme';
 import { usePlayer } from '../../context/PlayerContext';
 
 export function PlayerDashboard() {
-  const { jugador, cerrarSesion, recargarPerfil } = usePlayer();
+  const { jugador, cerrarSesion, recargarPerfil, ganarXp } = usePlayer();
   const [cargandoRecarga, setCargandoRecarga] = useState(false);
+  const [cargandoXp, setCargandoXp] = useState<number | null>(null);
+  const [mensajeExito, setMensajeExito] = useState(false);
+  const [notificacionXp, setNotificacionXp] = useState<string | null>(null);
 
   if (!jugador) {
     return null;
@@ -22,10 +25,38 @@ export function PlayerDashboard() {
   const manejarRecargar = async () => {
     if (cargandoRecarga) return;
     setCargandoRecarga(true);
+    setMensajeExito(false);
     try {
       await recargarPerfil();
+      setMensajeExito(true);
+      setTimeout(() => {
+        setMensajeExito(false);
+      }, 2500);
     } finally {
       setCargandoRecarga(false);
+    }
+  };
+
+  const manejarGanarXp = async (cantidad: number, motivo: string) => {
+    if (cargandoXp !== null) return;
+    setCargandoXp(cantidad);
+    setNotificacionXp(null);
+    try {
+      const res = await ganarXp(cantidad, motivo);
+      if (res.didLevelUp) {
+        setNotificacionXp(
+          `🎉 ¡LEVEL UP! Nivel ${res.newLevel} (+${res.skillPointsGained} Pt Habilidad)`,
+        );
+      } else {
+        setNotificacionXp(`⚡ +${res.xpGained} XP (${motivo})`);
+      }
+      setTimeout(() => {
+        setNotificacionXp(null);
+      }, 4000);
+    } catch (error) {
+      console.error('Error al ganar XP:', error);
+    } finally {
+      setCargandoXp(null);
     }
   };
 
@@ -77,8 +108,43 @@ export function PlayerDashboard() {
           </View>
         </View>
 
+        {/* Probar Progresión RPG */}
+        <View style={styles.tarjetaProgreso}>
+          <Text style={styles.tituloSeccion}>⚡ Simular Actividad (Ganar XP)</Text>
+
+          {notificacionXp && <Text style={styles.textoNotificacionXp}>{notificacionXp}</Text>}
+
+          <View style={styles.filaBotonesXp}>
+            <Pressable
+              style={[styles.botonXp, cargandoXp === 100 && styles.botonDeshabilitado]}
+              onPress={() => manejarGanarXp(100, 'Entrenamiento')}
+              disabled={cargandoXp !== null}>
+              {cargandoXp === 100 ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.textoBotonXp}>+100 XP (Entreno)</Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              style={[styles.botonXpEspecial, cargandoXp === 250 && styles.botonDeshabilitado]}
+              onPress={() => manejarGanarXp(250, 'Misión Cumplida')}
+              disabled={cargandoXp !== null}>
+              {cargandoXp === 250 ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.textoBotonXpEspecial}>+250 XP (Misión)</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+
         {/* Acciones de Cuenta */}
         <View style={styles.tarjetaAcciones}>
+          {mensajeExito && (
+            <Text style={styles.textoExito}>✓ Ficha actualizada correctamente</Text>
+          )}
+
           <Pressable
             style={[styles.botonRecargar, cargandoRecarga && styles.botonDeshabilitado]}
             onPress={manejarRecargar}
@@ -199,6 +265,53 @@ const styles = StyleSheet.create({
   tarjetaAcciones: {
     gap: Spacing.three,
     marginTop: Spacing.two,
+  },
+  textoNotificacionXp: {
+    color: '#F59E0B',
+    fontSize: 13,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: Spacing.two,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  filaBotonesXp: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  botonXp: {
+    flex: 1,
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  textoBotonXp: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  botonXpEspecial: {
+    flex: 1,
+    backgroundColor: '#7C3AED',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  textoBotonXpEspecial: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  textoExito: {
+    color: '#10B981',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
   },
   botonRecargar: {
     backgroundColor: '#334155',

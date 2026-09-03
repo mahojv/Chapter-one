@@ -48,6 +48,21 @@ export class ErrorApi extends Error {
   }
 }
 
+export interface ResultadoOtorgamientoXp {
+  playerId: string;
+  previousTotalXp: number;
+  newTotalXp: number;
+  previousLevel: number;
+  newLevel: number;
+  xpGained: number;
+  didLevelUp: boolean;
+  levelsGained: number;
+  skillPointsGained: number;
+  unspentSkillPoints: number;
+  totalSkillPointsEarned: number;
+  eventId: string;
+}
+
 const URL_BASE_API =
   process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '') || 'https://chapter-api.odysseo.uk';
 
@@ -130,5 +145,47 @@ export const clienteApi = {
     }
 
     return resultado.data as Jugador;
+  },
+
+  /**
+   * Otorga XP al personaje del usuario autenticado actual.
+   */
+  async otorgarXp(
+    obtenerToken: () => Promise<string | null>,
+    xpDelta: number,
+    reason?: string,
+  ): Promise<ResultadoOtorgamientoXp> {
+    const token = await obtenerToken();
+    if (!token) {
+      throw new ErrorApi(401, {
+        code: 'UNAUTHORIZED',
+        message: 'No se encontró un token de autenticación activo',
+      });
+    }
+
+    const respuesta = await fetch(`${URL_BASE_API}/players/me/xp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        xpDelta,
+        reason: reason || 'Prueba de ganancia de XP',
+      }),
+    });
+
+    const resultado = await respuesta.json().catch(() => ({}));
+
+    if (!respuesta.ok) {
+      throw new ErrorApi(respuesta.status, {
+        code: resultado?.error?.code || `HTTP_${respuesta.status}`,
+        message: resultado?.error?.message || 'Error al otorgar XP al personaje',
+        details: resultado?.error?.details,
+      });
+    }
+
+    return resultado.data as ResultadoOtorgamientoXp;
   },
 };

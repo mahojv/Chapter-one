@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import {
   esquemaActualizarJugador,
   esquemaCrearJugador,
+  esquemaOtorgarXp,
   esquemaParametroIdJugador,
 } from '@chapter-one/validation';
 import {
@@ -53,6 +54,74 @@ export const rutasJugadores: FastifyPluginAsync = async (servidor) => {
           error: {
             code: 'INTERNAL_SERVER_ERROR',
             message: 'Ocurrió un error inesperado al consultar el perfil',
+          },
+        });
+      }
+    },
+  );
+
+  /**
+   * POST /players/me/xp
+   * Otorga XP al personaje del usuario autenticado actual y devuelve el progreso actualizado.
+   */
+  servidor.post(
+    '/players/me/xp',
+    { preHandler: [servidor.authenticate] },
+    async (solicitud, respuesta) => {
+      const resultadoValidacion = esquemaOtorgarXp.safeParse(solicitud.body);
+      if (!resultadoValidacion.success) {
+        return respuesta.status(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'La carga útil para otorgar XP es inválida',
+            details: resultadoValidacion.error.format(),
+          },
+        });
+      }
+
+      try {
+        const pool = servidor.db.getPool();
+        // 1. Obtener mi perfil para conocer el playerId
+        const miPerfil = await servicioJugadores.obtenerMiPerfilJugador(
+          pool,
+          solicitud.authUserId,
+        );
+
+        // 2. Otorgar XP al personaje
+        const resultadoOtorgamiento = await servicioJugadores.otorgarXp(pool, {
+          playerId: miPerfil.id,
+          xpDelta: resultadoValidacion.data.xpDelta,
+          reason: resultadoValidacion.data.reason,
+          eventType: resultadoValidacion.data.eventType,
+          sourceEntityType: resultadoValidacion.data.sourceEntityType,
+          sourceEntityId: resultadoValidacion.data.sourceEntityId,
+        });
+
+        return respuesta.status(200).send({
+          success: true,
+          data: resultadoOtorgamiento,
+        });
+      } catch (error: unknown) {
+        if (
+          error instanceof ErrorPerfilJugadorRequerido ||
+          error instanceof ErrorJugadorNoEncontrado
+        ) {
+          return respuesta.status(error.statusCode).send({
+            success: false,
+            error: {
+              code: error.codigo,
+              message: error.message,
+            },
+          });
+        }
+
+        servidor.log.error(error, 'Error al otorgar XP al jugador autenticado');
+        return respuesta.status(500).send({
+          success: false,
+          error: {
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Ocurrió un error inesperado al procesar el otorgamiento de XP',
           },
         });
       }

@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/clerk-expo';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { clienteApi, type DatosCrearJugador, ErrorApi, type Jugador } from '../services/api';
+import { clienteApi, type DatosCrearJugador, ErrorApi, type Jugador, type ResultadoOtorgamientoXp } from '../services/api';
 
 export type EstadoIdentidad =
   | 'CARGANDO'
@@ -15,6 +15,7 @@ interface ContextoJugadorValor {
   errorMensaje: string | null;
   recargarPerfil: () => Promise<void>;
   crearPersonaje: (datos: DatosCrearJugador) => Promise<void>;
+  ganarXp: (xpDelta: number, reason?: string) => Promise<ResultadoOtorgamientoXp>;
   cerrarSesion: () => Promise<void>;
 }
 
@@ -85,8 +86,25 @@ export function ProveedorJugador({ children }: { children: React.ReactNode }) {
   }, [cargarPerfil]);
 
   const recargarPerfil = useCallback(async () => {
-    await cargarPerfil(true);
-  }, [cargarPerfil]);
+    if (!isLoaded || !isSignedIn || !userId) return;
+
+    try {
+      setErrorMensaje(null);
+      const perfil = await clienteApi.obtenerMiPerfil(() => getTokenRef.current());
+      setJugador(perfil);
+      setEstado('CON_JUGADOR');
+    } catch (error: unknown) {
+      if (error instanceof ErrorApi && error.code === 'PLAYER_PROFILE_REQUIRED') {
+        setJugador(null);
+        setEstado('REQUIERE_ONBOARDING');
+        return;
+      }
+      console.error('Error al recargar perfil de jugador:', error);
+      const mensaje =
+        error instanceof Error ? error.message : 'Error inesperado al conectar con el servidor';
+      setErrorMensaje(mensaje);
+    }
+  }, [isLoaded, isSignedIn, userId]);
 
   const crearPersonaje = useCallback(
     async (datos: DatosCrearJugador) => {
@@ -113,6 +131,23 @@ export function ProveedorJugador({ children }: { children: React.ReactNode }) {
     [cargarPerfil],
   );
 
+  const ganarXp = useCallback(async (xpDelta: number, reason?: string) => {
+    const res = await clienteApi.otorgarXp(() => getTokenRef.current(), xpDelta, reason);
+    setJugador((actual) => {
+      if (!actual) return null;
+      return {
+        ...actual,
+        progress: {
+          totalXp: res.newTotalXp,
+          currentLevel: res.newLevel,
+          unspentSkillPoints: res.unspentSkillPoints,
+          totalSkillPointsEarned: res.totalSkillPointsEarned,
+        },
+      };
+    });
+    return res;
+  }, []);
+
   const cerrarSesion = useCallback(async () => {
     setEstado('CARGANDO');
     await signOut();
@@ -130,6 +165,7 @@ export function ProveedorJugador({ children }: { children: React.ReactNode }) {
         errorMensaje,
         recargarPerfil,
         crearPersonaje,
+        ganarXp,
         cerrarSesion,
       }}>
       {children}

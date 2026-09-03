@@ -106,6 +106,32 @@ export const esquemaParametroIdJugador = z.object({
 });
 export const playerIdParamSchema = esquemaParametroIdJugador;
 
+// Esquema para otorgar XP: POST /players/me/xp
+export const esquemaOtorgarXp = z.object({
+  xpDelta: z
+    .number({ required_error: 'La cantidad de XP (xpDelta) es obligatoria' })
+    .int({ message: 'La XP debe ser un número entero' })
+    .positive({ message: 'La XP debe ser un número mayor a cero' }),
+  reason: z.string().max(200, 'La razón no puede exceder 200 caracteres').optional(),
+  eventType: z
+    .enum([
+      'WORKOUT_COMPLETED',
+      'HABIT_COMPLETED',
+      'QUEST_COMPLETED',
+      'ACHIEVEMENT_UNLOCKED',
+      'SKILL_XP_GAINED',
+      'LEVEL_UP',
+      'PERSONAL_RECORD',
+      'REST_DAY_LOGGED',
+      'SKILL_DECAY_CALCULATED',
+      'ATTRIBUTE_PROGRESS',
+    ])
+    .optional(),
+  sourceEntityType: z.string().max(50).optional(),
+  sourceEntityId: z.string().uuid({ message: 'sourceEntityId debe ser un UUID válido' }).optional(),
+});
+export const grantXpSchema = esquemaOtorgarXp;
+
 // -----------------------------------------------------------------------------
 // 3. Tipos Inferidos
 // -----------------------------------------------------------------------------
@@ -124,3 +150,6 @@ export type UpdatePlayerInput = EntradaActualizarJugador;
 
 export type ParametroIdJugador = z.infer<typeof esquemaParametroIdJugador>;
 export type PlayerIdParam = ParametroIdJugador;
+
+export type EntradaOtorgarXpValidada = z.infer<typeof esquemaOtorgarXp>;
+export type GrantXpValidatedInput = EntradaOtorgarXpValidada;
